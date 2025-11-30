@@ -1,0 +1,438 @@
+---
+title: "Análisis de Salud Mental y Redes Sociales"
+author: "Juan Ignacio Cacchione"
+format:
+  html:
+    embed-resources: true
+editor: visual
+---
+
+------------------------------------------------------------------------
+
+## Objetivo del análisis
+
+El objetivo de este trabajo es generar un documento de análisis de datos que evidencie las etapas de selección, limpieza, exploración y comunicación.
+
+Para ello, se ha seleccionado el dataset **"Mental Health and Social Media Balance"**, obtenido de la plataforma Kaggle. Este conjunto de datos contiene **500 registros**, donde cada fila representa a un individuo único. Se obtuvo de: [Kaggle Dataset Link](https://www.kaggle.com/datasets/ayeshaimran123/social-media-and-mental-health-balance)
+
+Este conjunto de datos explora la relación entre el uso de las redes sociales y la salud mental. Incluye información sobre el tiempo de pantalla de los usuarios, la calidad del sueño, los niveles de estrés, la frecuencia de ejercicio y el índice de felicidad. El objetivo es comprender cómo los hábitos digitales y los factores del estilo de vida influyen en el bienestar general y el equilibrio emocional.
+
+**Nota sobre la variable Social_Media_Platform:** Cada registro incluye la plataforma social que el usuario utiliza con mayor frecuencia (por ejemplo, TikTok, Instagram, LinkedIn, Facebook, YouTube o X/Twitter). Esta información permite analizar si existen diferencias en los hábitos digitales y el bienestar según la red social predominante.
+
+![](https://i0.wp.com/www.zeropsicologos.com/blog/wp-content/uploads/2023/07/adiccion-redes-sociales-2.jpg?w=1000&ssl=1.jpg)
+
+------------------------------------------------------------------------
+
+## Entornos y librerías
+
+```{r}
+#| message: false
+#| warning: false
+
+# Vector con los paquetes necesarios
+paquetes <- c("readr", "dplyr", "ggplot2", "plotly", "knitr", "kableExtra","tidyr")
+
+# Verificar cuáles paquetes no están instalados
+instalados <- paquetes %in% rownames(installed.packages())
+
+# Instalar los paquetes faltantes
+if (any(!instalados)) {
+  install.packages(paquetes[!instalados])
+}
+
+# Cargar todos los paquetes de forma automática
+invisible(lapply(paquetes, library, character.only = TRUE))
+
+
+```
+
+------------------------------------------------------------------------
+
+## 1.SELECCIÓN
+
+### 1.1 Carga de datos
+
+```{r}
+datos <- read_delim("Mental_Health_and_Social_Media_Balance_Dataset.csv", 
+                    delim = ",", show_col_types = FALSE)
+```
+
+### 1.2 Dimensiones del dataset
+
+```{r}
+dim(datos)
+```
+
+### 1.3 Resumen general
+
+```{r}
+summary(datos)
+```
+
+**Interpretación preliminar:** El resumen estadístico revela que la muestra está compuesta por adultos de entre **16 y 49 años**, con un consumo promedio de pantalla elevado (**5.5 horas diarias**).
+
+Un hallazgo destacable es la aparente contradicción entre los niveles de bienestar: mientras que la mediana del **Nivel de Estrés** es considerable (**7**), el **Índice de Felicidad** es extremadamente alto (Mediana de **9**), lo que sugiere una **distribución sesgada** hacia valores altos en esta última variable. Además, no se observan **valores faltantes (NA)** ni rangos inconsistentes a primera vista.
+
+El análisis del resumen general también nos proporciona contexto sobre el estilo de vida de la muestra. Se observa que, si bien el **uso diario de pantalla** es elevado (Media de **5.53 horas**), la **Calidad del Sueño** se mantiene en un nivel moderado (Media de **6.3**). Complementariamente, la **Frecuencia de Ejercicio** (Media de **2.44 veces/semana**) será un factor crucial a explorar, ya que puede estar actuando como un balanceador entre el estrés y la felicidad reportada.
+
+Ante este resultado, el presente análisis buscará entender la **relación entre tiempo de pantalla, estrés y felicidad**. Investigaré la **paradoja** de la convivencia entre alto estrés y alta felicidad, buscando la existencia de patrones. Finalmente, analizaré si existen **plataformas específicas** (ej. TikTok vs LinkedIn) asociadas a un mayor consumo o malestar.
+
+### 1.4 Primeras 10 filas en tabla
+
+```{r}
+#| echo: false
+
+datos %>%
+  head(10) %>%
+  dplyr::rename(
+    `Sleep_Quality (1-10)`= `Sleep_Quality(1-10)`,
+    `Stress_Level (1-10)` = `Stress_Level(1-10)`,
+    `Happiness_Index (1-10)` = `Happiness_Index(1-10)`
+  ) %>%
+  kable() %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE,
+    font_size = 12
+  ) %>%
+  column_spec(1, bold = TRUE, color = "white", background = "#0073C2") %>%
+  row_spec(0, bold = TRUE, background = "#2E2E2E", color = "white") 
+
+
+```
+
+------------------------------------------------------------------------
+
+## 2. LIMPIEZA
+
+### 2.1 Control para asegurar que no haya inconsistencias
+
+```{r}
+#| echo: false
+calidad_datos <- datos %>%
+  summarise(
+    Errores_Edad     = sum(Age < 10 | Age > 100),
+    Errores_Pantalla = sum(`Daily_Screen_Time(hrs)` < 0 | `Daily_Screen_Time(hrs)` > 24),
+    Errores_Indices  = sum(`Happiness_Index(1-10)` < 1 | `Happiness_Index(1-10)` > 10)
+  )
+
+kable(calidad_datos)
+```
+
+Se confirma que no hay valores inconsistentes o atípicos
+
+### 2.2 Transformación y Depuración
+
+En este paso se recodifican las variables de texto a factores **(Gender, Social_Media_Platform)** para su correcta interpretación en la visualización. Además, se crea la variable ordinal **Stress_Category** a partir de la escala numérica de estrés, lo cual es esencial para realizar comparaciones por grupos (como Boxplots y tablas de resumen) en la etapa de Exploración. También se la convierte a factor.
+
+```{r}
+datos_limpios <- datos %>%
+  mutate(
+    Gender = factor(Gender),
+    Social_Media_Platform = factor(Social_Media_Platform),
+    Stress_Category = case_when(
+      `Stress_Level(1-10)` <= 4 ~ "Bajo (1-4)",
+      `Stress_Level(1-10)` <= 7 ~ "Medio (5-7)",
+      TRUE                      ~ "Alto (8-10)"
+    ),
+    Stress_Category = factor(Stress_Category, 
+                             levels = c("Bajo (1-4)", "Medio (5-7)", "Alto (8-10)"), 
+                             ordered = TRUE)
+  )
+```
+
+------------------------------------------------------------------------
+
+## 3. EXPLORACIÓN
+
+### 3.1 Análisis Univariado
+
+En esta sección profundizaremos en el comportamiento individual de las variables claves. Este análisis gráfico actúa como un **complemento visual al resumen estadístico (summary)** presentado anteriormente, permitiéndonos detectar formas de distribución, sesgos y patrones de frecuencia.
+
+#### 3.1.1 Distribución de Edad
+
+```{r}
+#| echo: false
+ggplot(datos_limpios, aes(x = Age)) +
+  geom_histogram(binwidth = 5, fill = "#69b3a2", color = "white") +
+  labs( x = "Edad", y = "Frecuencia") +
+  theme_minimal()
+```
+
+La muestra está compuesta principalmente por **adultos jóvenes y de mediana edad**, con una **mediana de 34 años** y la mayoría concentrada entre **24 y 41 años**. Esto indica que el grupo analizado corresponde a personas en etapas activas de vida laboral y social. Los extremos son poco frecuentes: menores de 20 años representan una proporción reducida, y no hay presencia de **adultos mayores (≥60)**. En conjunto, la distribución sugiere que el análisis se centra en una muestra orientada a **perfiles productivos**, lo que puede influir en patrones como uso de redes sociales, tiempo frente a pantalla y niveles de estrés.
+
+#### 3.1.2 Distribución de Estrés
+
+```{r}
+#| echo: false
+
+ggplot(datos_limpios, aes(x = Stress_Category, fill = Stress_Category)) +
+  geom_bar() +
+  scale_fill_manual(values = c("#99cc99", "#ffcc66", "#ff6666")) +
+  labs(
+       x = "Nivel de Estrés", y = "Cantidad de Personas") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r}
+#| echo: false
+
+ggplot(datos_limpios, aes(x = `Stress_Level(1-10)`)) +
+  
+  geom_bar(fill = "steelblue", color = "white") +
+  
+  scale_x_continuous(breaks = 1:10) +
+  
+  labs(title = "Distribución Detallada de los Niveles de Estrés",
+       x = "Nivel de Estrés", 
+       y = "Cantidad de Personas") +
+  theme_minimal()
+```
+
+La distribución de los niveles de estrés en la muestra de **500 individuos** presenta un **claro sesgo hacia valores altos**. El puntaje de estrés más frecuente es **7**, seguido por **8 y 6**, lo que sitúa el centro de la distribución en la mitad superior de la escala. El análisis categórico confirma que la mayoría de los usuarios se concentran en el rango de **Estrés Medio (5-7)** y **Alto (8-10)**, mientras que el Estrés Bajo es el menos común.
+
+#### 3.1.3 Distribución por Género
+
+```{r}
+#| echo: false
+
+#| label: grafico-genero
+#| echo: false
+#| warning: false
+
+tabla_genero <- datos_limpios %>% count(Gender)
+
+ggplot(tabla_genero, aes(x = Gender, y = n, fill = Gender)) +
+  geom_col() +
+  geom_text(aes(label = n), vjust = -0.5) +
+  scale_fill_brewer(palette = "Pastel1") +
+  labs(title = "Composición de la Muestra por Género", 
+       x = "", y = "Cantidad de Personas") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+
+La muestra está compuesta principalmente por personas identificadas como **masculinos (248)** y **femeninos (229)**, con una **diferencia pequeña** entre ambos grupos. La categoría **Other** representa una **proporción muy reducida (23 casos)**.
+
+#### 3.1.4 Distribución de Felicidad
+
+```{r}
+#| echo: false
+
+ggplot(datos_limpios, aes(x = `Happiness_Index(1-10)`)) +
+  geom_histogram(binwidth = 1, fill = "#69b3a2", color = "white") +
+  scale_x_continuous(breaks = 1:10) + 
+  labs(title = "Distribución del Índice de Felicidad", 
+       x = "Índice de Felicidad (1-10)", 
+       y = "Cantidad de Personas") +
+  theme_minimal()
+```
+
+El histograma presenta una clara **asimetría hacia la izquierda**. La gran mayoría de los datos se agrupan en los **valores más altos**, con el puntaje **10** como el más frecuente (**moda**). La **falta de respuestas en los niveles bajos (1-3)** evidencia una **fuerte tendencia** de la muestra a reportar **niveles máximos de bienestar**.
+
+#### 3.1.5 Disribución de Red Social
+
+```{r}
+#| echo: false
+
+datos_limpios %>%
+  count(Social_Media_Platform) %>%
+  mutate(Porcentaje = round(n / sum(n) * 100, 1)) %>% 
+  arrange(desc(n)) %>%
+  kable(col.names = c("Red Social", "Cantidad", "Porcentaje (%)"),
+        caption = "Distribución de Usuarios por Plataforma Social")
+```
+
+La tabla de frecuencias revela una distribución de la muestra relativamente **equilibrada** entre las seis plataformas sociales principales. La plataforma más utilizada es **TikTok (19%)**, seguida de cerca por **X (Twitter)** y **LinkedIn**, sin que **ninguna red social supere el 20%** de la muestra total.
+
+### 3.2 Análisis Bivariado
+
+Una vez comprendida la distribución individual de las variables, procedemos a evaluar la **interacción entre ellas**.
+
+#### 3.2.1 Relación entre Tiempo de Pantalla y Felicidad
+
+```{r}
+#| echo: false
+
+p_hex <- ggplot(datos_limpios, aes(`Daily_Screen_Time(hrs)`, `Happiness_Index(1-10)`)) +
+  geom_hex(bins = 25) +
+  scale_fill_viridis_c() +
+  labs(title = "Densidad de puntos: Pantalla vs Felicidad") +
+  theme_minimal()
+
+ggplotly(p_hex)
+
+```
+
+Este gráfico confirma la fuerte correlación inversa y enriquece el hallazgo conectándolo con el **análisis univariado**. Se observa claramente un **núcleo de alta densidad** (zonas más claras/brillantes) en los niveles de felicidad 8, 9 y 10.
+
+Sin embargo, este núcleo se desplaza hacia abajo a medida que nos movemos a la derecha en el eje X (más horas de pantalla). Esto evidencia visualmente que, aunque la muestra tiende a ser feliz, sostener esos niveles de **bienestar** se vuelve muy difícil para los usuarios con consumo digital intensivo.
+
+#### 3.2.2 Relación entre Uso de Pantalla vs Estrés
+
+```{r}
+#| echo: false
+
+tabla_resumen <- datos_limpios %>%
+  group_by(Stress_Category) %>%
+  summarise(
+    Promedio_Horas = mean(`Daily_Screen_Time(hrs)`),
+    Mediana_Horas = median(`Daily_Screen_Time(hrs)`),
+    Desvio_Estandar = sd(`Daily_Screen_Time(hrs)`)
+  )
+
+kable(tabla_resumen, digits = 2, caption = "Uso de Pantalla según Nivel de Estrés")
+```
+
+```{r}
+#| echo: false
+
+ggplot(datos_limpios, aes(x = Stress_Category, y = `Daily_Screen_Time(hrs)`, fill = Stress_Category)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("#99cc99", "#ffcc66", "#ff6666")) +
+  labs(title = "Comportamiento del Usuario según Estrés",
+       x = "Nivel de Estrés", y = "Horas de Pantalla Diarias") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+
+El gráfico confirma una **relación directa**: **a mayor estrés, mayor tiempo frente a la pantalla**. Se observa una **brecha de 4.1 horas** en la mediana de uso entre los grupos extremos (**3.0 h** en Estrés Bajo vs. **7.1 h** en Estrés Alto). La clara separación entre las cajas del boxplot indica que el **uso intensivo de dispositivos** es un comportamiento distintivo asociado al malestar psicológico, y no un hecho aislado.
+
+#### 3.2.3 Relación Felicidad vs Estrés
+
+```{r}
+#| echo: false
+
+ggplot(datos_limpios, aes(x = `Stress_Level(1-10)`, y = `Happiness_Index(1-10)`)) +
+  geom_point(alpha = 0.6, color = "darkgreen") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "Relación entre Estrés y Felicidad",
+       x = "Nivel de Estrés", y = "Índice de Felicidad") +
+  theme_minimal()
+```
+
+El gráfico evidencia una **relación inversa** marcada entre estrés y felicidad. Se observa que la mayor densidad de puntos se concentra en niveles de **Felicidad alta** (puntuaciones de 9 y 10), incluso cuando el **Estrés** se sitúa en rangos medios (5-7 puntos). Esto puede indicar que, para esta muestra, el estrés moderado es un estado **normalizado o percibido como saludable (Eustrés)**. No obstante, la línea de tendencia confirma que el incremento del estrés a niveles altos (por encima de 8) se asocia con una **caída significativa** en la percepción de felicidad.
+
+#### 3.2.4 Mapa de calor de correlaciones
+
+Para finalizar esta sección y asegurarnos de no omitir ninguna relación relevante entre las variables numéricas restantes, presentamos un mapa de calor (heatmap) que resume todas las interacciones del dataset.
+
+```{r}
+#| echo: false
+
+# Seleccionar variables numéricas
+    numeric_vars <- datos_limpios %>%
+      select(Age, `Daily_Screen_Time(hrs)`, `Sleep_Quality(1-10)`,
+             `Stress_Level(1-10)`, `Days_Without_Social_Media`,
+             `Exercise_Frequency(week)`, `Happiness_Index(1-10)`)
+
+# Calcular matriz de correlación
+    matriz_cor <- round(cor(numeric_vars), 2)
+    
+# Convertir la matriz a formato largo
+    datos_heatmap <- as.data.frame(matriz_cor) %>%
+      tibble::rownames_to_column("Var1") %>%
+      pivot_longer(cols = -Var1, names_to = "Var2", values_to = "Correlacion")
+    
+# Generar el Heatmap
+ggplot(datos_heatmap, aes(x = Var1, y = Var2, fill = Correlacion)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(
+    low = "#e74c3c", mid = "white", high = "#3498db",
+    midpoint = 0, limit = c(-1, 1), name = "Correlación"
+  ) +
+  geom_text(aes(label = round(Correlacion, 2)), color = "black", size = 3) +
+  theme_minimal() +
+  labs(
+    title = "Mapa de Calor de Correlaciones",
+    x = "", y = ""
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 8),
+    plot.title = element_text(hjust = 0.5),
+    panel.grid.major = element_blank(),
+    panel.border = element_blank()
+  )
+```
+
+Este gráfico nos permite validar los hallazgos previos y descubrir nuevas conexiones en las variables que no graficamos individualmente:
+
+1- **El rol oculto del Sueño**: Se observa que la Calidad del Sueño) juega un papel fundamental. Tiene una correlación positiva muy fuerte con la Felicidad (0.73) y negativa con el Tiempo de Pantalla (-0.63). Esto sugiere un efecto en cadena: más pantallas $\rightarrow$ peor sueño $\rightarrow$ menos felicidad.
+
+2- **Validación del Triángulo Principal**: Los colores más intensos confirman que el triángulo Estrés-Pantalla-Felicidad presenta las correlaciones más fuertes del sistema, validando que son los ejes principales del bienestar en esta muestra.
+
+3-**Variables de bajo impacto**: Confirmamos visualmente (colores claros/blancos) que ni la Edad, ni genero, ni hacer Ejercicio tienen un peso determinante en la ecuación de felicidad o estrés para este grupo de datos.
+
+### 3.3 Análisis Multivariado
+
+Una vez confirmadas las relaciones bivariadas principales, elevamos el nivel del análisis. El objetivo es verificar la **universalidad** de la correlación negativa (Pantalla $\downarrow$ Felicidad) al incorporar dos variables de control: el **Género** y la **Plataforma Social**. Esto permite determinar si alguna categoría actúa como un factor diferenciador o si el impacto digital es totalmente homogéneo.
+
+#### 3.3.1 Relacion entre Tiempo Pantalla vs Felicidad por Género
+
+```{r}
+#| echo: false
+
+ggplot(datos_limpios, aes(x = `Daily_Screen_Time(hrs)`, y = `Happiness_Index(1-10)`)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  facet_wrap(~Gender) +
+  labs(title = "Relación Pantalla vs Felicidad por Género") +
+  theme_minimal()
+```
+
+El análisis confirma que el **género no influye** en la relación entre el tiempo de pantalla y la felicidad. La **tendencia negativa** (más pantalla $\rightarrow$ menos felicidad) es **uniforme** para Femenino, Masculino y la categoría Otros, ya que todas las líneas de regresión en el gráfico facetado tienen pendientes negativas y **visualmente similares**.
+
+#### 3.3.2 Relación Pantalla vs Felicidad por Plataforma Social
+
+```{r}
+#| echo: false
+
+ggplot(datos_limpios, aes(x = `Daily_Screen_Time(hrs)`, y = `Happiness_Index(1-10)`)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  facet_wrap(~Social_Media_Platform) + # <--- ¡Cambiamos Gender por Plataforma!
+  labs(title = "Relación Pantalla vs Felicidad por Plataforma Social") +
+  theme_minimal()
+```
+
+El análisis confirma que la **tendencia negativa** entre el tiempo de pantalla y la felicidad se manifiesta en **todos los paneles del gráfico**. Si bien existen diferencias en la **dispersión de los puntos** (matices), la regla básica de que a **mayor uso de pantalla, menor es la felicidad** se mantiene para todas las **redes sociales principales**.
+
+------------------------------------------------------------------------
+
+## 4. COMUNICACIÓN
+
+### Conclusiones
+
+El análisis de los 500 perfiles en el dataset *Mental Health and Social Media Balance* revela patrones claros sobre cómo nuestra vida digital moldea y a menudo deteriora el bienestar emocional.
+
+![](https://www.areahumana.es/wp-content/uploads/2023/04/redes-sociales-y-salud-mental.jpg)
+
+------------------------------------------------------------------------
+
+**1. Correlación Pantalla y Bienestar 📉**
+
+Nuestros datos confirman el costo real de la hiperconectividad: existe una **correlación inversa muy fuerte** entre el tiempo que pasamos frente a la pantalla y nuestro índice de felicidad.
+
+Aunque muchos usuarios reportan altos niveles de bienestar, esta disminuye **sistemáticamente** con el incremento del tiempo digital. Este no es un problema casual; es una tendencia **robusta** que demuestra que la gestión del tiempo digital es vital.
+
+**2. Estrés y Consumo Digital** 📱
+
+El estrés actúa como un catalizador para el uso de dispositivos. Las personas con **estrés alto duplican** la mediana de tiempo frente a la pantalla respecto a quienes tienen estrés bajo (pasando de $\approx$**3 horas** a $\approx$**7 horas** diarias).
+
+Esto refuerza la hipótesis de que las pantallas se convierten en un **mecanismo de evasión**. Sin embargo, este refugio es contraproducente, ya que este alto consumo, a su vez, se asocia a una caída en la percepción general de bienestar.
+
+**3. El Tiempo Total como Factor Crítico 🌎**
+
+Analizamos si el problema estaba en la plataforma, pero la respuesta es contundente: **el problema no es la red social, es el tiempo total de exposición.**
+
+La **tendencia negativa** entre tiempo de pantalla y bienestar se observó **uniformemente en todos los géneros** y en **todas las plataformas** (TikTok, LinkedIn, Instagram, etc.). La intensidad del impacto digital es la misma para el perfil más joven que para el adulto de mediana edad.
+
+------------------------------------------------------------------------
+
+### Reflexión Final y Opinion Personal:
+
+Las redes sociales son herramientas poderosas para la conexión y el entretenimiento. Aunque los datos utilizados son de naturaleza educativa, reflejan una realidad que muchos percibimos: el uso excesivo está fuertemente asociado con indicadores negativos de salud mental. Reducir el tiempo frente a la pantalla de los dispositivos moviles es esencial para proteger nuestro equilibrio emocional en la era digital.
