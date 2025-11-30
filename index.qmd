@@ -239,7 +239,7 @@ ggplot(datos_limpios, aes(x = `Happiness_Index(1-10)`)) +
 
 El histograma presenta una clara **asimetría hacia la izquierda**. La gran mayoría de los datos se agrupan en los **valores más altos**, con el puntaje **10** como el más frecuente (**moda**). La **falta de respuestas en los niveles bajos (1-3)** evidencia una **fuerte tendencia** de la muestra a reportar **niveles máximos de bienestar**.
 
-#### 3.1.5 Disribución de Red Social
+#### 3.1.5 Distribución de Red Social
 
 ```{r}
 #| echo: false
@@ -367,11 +367,11 @@ ggplot(datos_heatmap, aes(x = Var1, y = Var2, fill = Correlacion)) +
 
 Este gráfico nos permite validar los hallazgos previos y descubrir nuevas conexiones en las variables que no graficamos individualmente:
 
-1- **El rol oculto del Sueño**: Se observa que la Calidad del Sueño) juega un papel fundamental. Tiene una correlación positiva muy fuerte con la Felicidad (0.73) y negativa con el Tiempo de Pantalla (-0.63). Esto sugiere un efecto en cadena: más pantallas -\> peor sueño -\>\$ menos felicidad.
+1- **El rol oculto del Sueño**: Se observa que la Calidad del Sueño) juega un papel fundamental. Tiene una correlación positiva muy fuerte con la Felicidad (0.73) y negativa con el Tiempo de Pantalla (-0.63). Esto sugiere un efecto en cadena: más pantallas -> peor sueño -> menos felicidad.
 
 2- **Validación del Triángulo Principal**: Los colores más intensos confirman que el triángulo Estrés-Pantalla-Felicidad presenta las correlaciones más fuertes del sistema, validando que son los ejes principales del bienestar en esta muestra.
 
-3-**Variables de bajo impacto**: Confirmamos que ni la Edad, ni genero, ni hacer Ejercicio tienen un peso determinante en la percepción de felicidad o estrés para este grupo de datos.
+3-**Variables de bajo impacto**: Confirmamos que ni la Edad, ni hacer Ejercicio tienen un peso determinante en la percepción de felicidad o estrés para este grupo de datos.
 
 ### 3.3 Análisis Multivariado
 
@@ -381,29 +381,18 @@ Una vez confirmadas las relaciones bivariadas principales, elevamos el nivel del
 
 ```{r}
 #| echo: false
-
-ggplot(datos_limpios, aes(x = `Daily_Screen_Time(hrs)`, y = `Happiness_Index(1-10)`)) +
-  geom_point(alpha = 0.6) +
-  geom_smooth(method = "lm", se = FALSE, color = "red") +
-  facet_wrap(~Gender) +
-  labs(title = "Relación Pantalla vs Felicidad por Género") +
-  theme_minimal()
-```
-
-El análisis confirma que el **género no influye** en la relación entre el tiempo de pantalla y la felicidad. La **tendencia negativa** más pantalla implica menos felicidad es **uniforme** para Femenino, Masculino y la categoría Otros, ya que todas las líneas de regresión en el gráfico facetado tienen pendientes negativas y **visualmente similares**.
-
-#### 3.3.2 Relación Pantalla vs Felicidad por Plataforma Social
-
-```{r}
-#| echo: false
 #| message: false
+#| warning: false
 
 ggplot(datos_limpios, aes(x = `Daily_Screen_Time(hrs)`, y = `Happiness_Index(1-10)`)) +
   geom_point(alpha = 0.6) +
-  geom_smooth(method = "lm", se = FALSE, color = "red") +
-  facet_wrap(~Social_Media_Platform) + 
-  labs(title = "Relación Pantalla vs Felicidad por Plataforma Social") +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE, color = "red") +
+  facet_wrap(~Gender) +
+  labs(
+       x = "Horas de Pantalla Diarias",
+       y = "Índice de Felicidad (1-10)") +
   theme_minimal()
+
 ```
 
 El análisis confirma que la **tendencia negativa** entre el tiempo de pantalla y la felicidad se manifiesta en **todos los paneles del gráfico**. Si bien existen diferencias en la **dispersión de los puntos** (matices), la regla básica de que a **mayor uso de pantalla, menor es la felicidad** se mantiene para todas las **redes sociales principales**.
@@ -438,6 +427,6 @@ La **tendencia negativa** entre tiempo de pantalla y bienestar se observó **uni
 
 ------------------------------------------------------------------------
 
-### Reflexión Final y Opinion Personal:
+### Reflexión Final:
 
 Las redes sociales son herramientas poderosas para la conexión y el entretenimiento. Aunque los datos utilizados son de naturaleza educativa, reflejan una realidad que muchos percibimos: el uso excesivo está fuertemente asociado con indicadores negativos de salud mental. Reducir el tiempo frente a la pantalla de los dispositivos moviles es esencial para proteger nuestro equilibrio emocional en la era digital.
