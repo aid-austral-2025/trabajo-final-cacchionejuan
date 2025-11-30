@@ -28,16 +28,23 @@ Este conjunto de datos explora la relación entre el uso de las redes sociales y
 ```{r}
 #| message: false
 #| warning: false
+#| paged-print: true
+## ENTORNO Y LIBRERÍAS
+
+# 1. Configurar un mirror de CRAN ANTES de intentar instalar (Soluciona el error 'trying to use CRAN without setting a mirror')
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
 
 # Vector con los paquetes necesarios
-paquetes <- c("readr", "dplyr", "ggplot2", "plotly", "knitr", "kableExtra","tidyr")
+paquetes <- c("readr", "dplyr", "ggplot2", "plotly", "knitr", "kableExtra","tidyr", "reshape2","hexbin") 
 
 # Verificar cuáles paquetes no están instalados
 instalados <- paquetes %in% rownames(installed.packages())
 
 # Instalar los paquetes faltantes
 if (any(!instalados)) {
-  install.packages(paquetes[!instalados])
+  # Instalamos y mostramos el progreso si faltan paquetes
+  message("Instalando paquetes faltantes...")
+  install.packages(paquetes[!instalados], dependencies = TRUE)
 }
 
 # Cargar todos los paquetes de forma automática
@@ -108,12 +115,12 @@ datos %>%
 ### 2.1 Control para asegurar que no haya inconsistencias
 
 ```{r}
-#| echo: false
+#| echo: true
 calidad_datos <- datos %>%
   summarise(
     Errores_Edad     = sum(Age < 10 | Age > 100),
     Errores_Pantalla = sum(`Daily_Screen_Time(hrs)` < 0 | `Daily_Screen_Time(hrs)` > 24),
-    Errores_Indices  = sum(`Happiness_Index(1-10)` < 1 | `Happiness_Index(1-10)` > 10)
+    Errores_Indice_Felicidad  = sum(`Happiness_Index(1-10)` < 1 | `Happiness_Index(1-10)` > 10)
   )
 
 kable(calidad_datos)
@@ -155,7 +162,7 @@ En esta sección profundizaremos en el comportamiento individual de las variable
 #| echo: false
 ggplot(datos_limpios, aes(x = Age)) +
   geom_histogram(binwidth = 5, fill = "#69b3a2", color = "white") +
-  labs( x = "Edad", y = "Frecuencia") +
+  labs( x = "Edad", y = "Cantidad de Personas") +
   theme_minimal()
 ```
 
@@ -184,7 +191,7 @@ ggplot(datos_limpios, aes(x = `Stress_Level(1-10)`)) +
   
   scale_x_continuous(breaks = 1:10) +
   
-  labs(title = "Distribución Detallada de los Niveles de Estrés",
+  labs(
        x = "Nivel de Estrés", 
        y = "Cantidad de Personas") +
   theme_minimal()
@@ -207,7 +214,7 @@ ggplot(tabla_genero, aes(x = Gender, y = n, fill = Gender)) +
   geom_col() +
   geom_text(aes(label = n), vjust = -0.5) +
   scale_fill_brewer(palette = "Pastel1") +
-  labs(title = "Composición de la Muestra por Género", 
+  labs( 
        x = "", y = "Cantidad de Personas") +
   theme_minimal() +
   theme(legend.position = "none")
@@ -224,7 +231,7 @@ La muestra está compuesta principalmente por personas identificadas como **masc
 ggplot(datos_limpios, aes(x = `Happiness_Index(1-10)`)) +
   geom_histogram(binwidth = 1, fill = "#69b3a2", color = "white") +
   scale_x_continuous(breaks = 1:10) + 
-  labs(title = "Distribución del Índice de Felicidad", 
+  labs(
        x = "Índice de Felicidad (1-10)", 
        y = "Cantidad de Personas") +
   theme_minimal()
@@ -241,8 +248,7 @@ datos_limpios %>%
   count(Social_Media_Platform) %>%
   mutate(Porcentaje = round(n / sum(n) * 100, 1)) %>% 
   arrange(desc(n)) %>%
-  kable(col.names = c("Red Social", "Cantidad", "Porcentaje (%)"),
-        caption = "Distribución de Usuarios por Plataforma Social")
+  kable(col.names = c("Red Social", "Cantidad", "Porcentaje (%)"))
 ```
 
 La tabla de frecuencias revela una distribución de la muestra relativamente **equilibrada** entre las seis plataformas sociales principales. La plataforma más utilizada es **TikTok (19%)**, seguida de cerca por **X (Twitter)** y **LinkedIn**, sin que **ninguna red social supere el 20%** de la muestra total.
@@ -283,7 +289,7 @@ tabla_resumen <- datos_limpios %>%
     Desvio_Estandar = sd(`Daily_Screen_Time(hrs)`)
   )
 
-kable(tabla_resumen, digits = 2, caption = "Uso de Pantalla según Nivel de Estrés")
+kable(tabla_resumen, digits = 2)
 ```
 
 ```{r}
@@ -361,15 +367,15 @@ ggplot(datos_heatmap, aes(x = Var1, y = Var2, fill = Correlacion)) +
 
 Este gráfico nos permite validar los hallazgos previos y descubrir nuevas conexiones en las variables que no graficamos individualmente:
 
-1- **El rol oculto del Sueño**: Se observa que la Calidad del Sueño) juega un papel fundamental. Tiene una correlación positiva muy fuerte con la Felicidad (0.73) y negativa con el Tiempo de Pantalla (-0.63). Esto sugiere un efecto en cadena: más pantallas $\rightarrow$ peor sueño $\rightarrow$ menos felicidad.
+1- **El rol oculto del Sueño**: Se observa que la Calidad del Sueño) juega un papel fundamental. Tiene una correlación positiva muy fuerte con la Felicidad (0.73) y negativa con el Tiempo de Pantalla (-0.63). Esto sugiere un efecto en cadena: más pantallas -\> peor sueño -\>\$ menos felicidad.
 
 2- **Validación del Triángulo Principal**: Los colores más intensos confirman que el triángulo Estrés-Pantalla-Felicidad presenta las correlaciones más fuertes del sistema, validando que son los ejes principales del bienestar en esta muestra.
 
-3-**Variables de bajo impacto**: Confirmamos visualmente (colores claros/blancos) que ni la Edad, ni genero, ni hacer Ejercicio tienen un peso determinante en la ecuación de felicidad o estrés para este grupo de datos.
+3-**Variables de bajo impacto**: Confirmamos que ni la Edad, ni genero, ni hacer Ejercicio tienen un peso determinante en la percepción de felicidad o estrés para este grupo de datos.
 
 ### 3.3 Análisis Multivariado
 
-Una vez confirmadas las relaciones bivariadas principales, elevamos el nivel del análisis. El objetivo es verificar la **universalidad** de la correlación negativa (Pantalla $\downarrow$ Felicidad) al incorporar dos variables de control: el **Género** y la **Plataforma Social**. Esto permite determinar si alguna categoría actúa como un factor diferenciador o si el impacto digital es totalmente homogéneo.
+Una vez confirmadas las relaciones bivariadas principales, elevamos el nivel del análisis. Incorporamos dos variables: el **Género** y la **Plataforma Social** al análisis de la relación entre felicidad y tiempo de pantalla. Esto permite determinar si alguna categoría actúa como un **factor diferenciador** o si el impacto digital es totalmente **homogéneo**.
 
 #### 3.3.1 Relacion entre Tiempo Pantalla vs Felicidad por Género
 
@@ -384,17 +390,18 @@ ggplot(datos_limpios, aes(x = `Daily_Screen_Time(hrs)`, y = `Happiness_Index(1-1
   theme_minimal()
 ```
 
-El análisis confirma que el **género no influye** en la relación entre el tiempo de pantalla y la felicidad. La **tendencia negativa** (más pantalla $\rightarrow$ menos felicidad) es **uniforme** para Femenino, Masculino y la categoría Otros, ya que todas las líneas de regresión en el gráfico facetado tienen pendientes negativas y **visualmente similares**.
+El análisis confirma que el **género no influye** en la relación entre el tiempo de pantalla y la felicidad. La **tendencia negativa** más pantalla implica menos felicidad es **uniforme** para Femenino, Masculino y la categoría Otros, ya que todas las líneas de regresión en el gráfico facetado tienen pendientes negativas y **visualmente similares**.
 
 #### 3.3.2 Relación Pantalla vs Felicidad por Plataforma Social
 
 ```{r}
 #| echo: false
+#| message: false
 
 ggplot(datos_limpios, aes(x = `Daily_Screen_Time(hrs)`, y = `Happiness_Index(1-10)`)) +
   geom_point(alpha = 0.6) +
   geom_smooth(method = "lm", se = FALSE, color = "red") +
-  facet_wrap(~Social_Media_Platform) + # <--- ¡Cambiamos Gender por Plataforma!
+  facet_wrap(~Social_Media_Platform) + 
   labs(title = "Relación Pantalla vs Felicidad por Plataforma Social") +
   theme_minimal()
 ```
@@ -413,21 +420,19 @@ El análisis de los 500 perfiles en el dataset *Mental Health and Social Media B
 
 ------------------------------------------------------------------------
 
-**1. Correlación Pantalla y Bienestar 📉**
+**1. Correlación Pantalla y Bienestar**
 
-Nuestros datos confirman el costo real de la hiperconectividad: existe una **correlación inversa muy fuerte** entre el tiempo que pasamos frente a la pantalla y nuestro índice de felicidad.
+Los datos confirman que existe una **correlación inversa muy fuerte** entre el tiempo que pasamos frente a la pantalla y nuestro índice de felicidad.
 
 Aunque muchos usuarios reportan altos niveles de bienestar, esta disminuye **sistemáticamente** con el incremento del tiempo digital. Este no es un problema casual; es una tendencia **robusta** que demuestra que la gestión del tiempo digital es vital.
 
-**2. Estrés y Consumo Digital** 📱
+**2. Estrés y Consumo Digital**
 
-El estrés actúa como un catalizador para el uso de dispositivos. Las personas con **estrés alto duplican** la mediana de tiempo frente a la pantalla respecto a quienes tienen estrés bajo (pasando de $\approx$**3 horas** a $\approx$**7 horas** diarias).
+Se confirma una **relación directa** entre el estrés y el consumo digital: las personas con **estrés alto duplican** la mediana de tiempo frente a la pantalla respecto a quienes tienen estrés bajo (pasando de **aproximadamente 3 horas** a **aproximadamente 7 horas** diarias). Este **alto consumo** se convierte en un factor que **aumenta los niveles de estrés**.
 
-Esto refuerza la hipótesis de que las pantallas se convierten en un **mecanismo de evasión**. Sin embargo, este refugio es contraproducente, ya que este alto consumo, a su vez, se asocia a una caída en la percepción general de bienestar.
+**3. El Tiempo Total como Factor Crítico**
 
-**3. El Tiempo Total como Factor Crítico 🌎**
-
-Analizamos si el problema estaba en la plataforma, pero la respuesta es contundente: **el problema no es la red social, es el tiempo total de exposición.**
+Analizamos si el problema estaba en la plataforma, pero la respuesta es: **el problema no es la red social, es el tiempo total de exposición.**
 
 La **tendencia negativa** entre tiempo de pantalla y bienestar se observó **uniformemente en todos los géneros** y en **todas las plataformas** (TikTok, LinkedIn, Instagram, etc.). La intensidad del impacto digital es la misma para el perfil más joven que para el adulto de mediana edad.
 
